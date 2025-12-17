@@ -6,11 +6,16 @@
   <title>Tobogán 3D</title>
   <style>
     body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #0b1220; }
-    #btn-toggle-walls {
+    #ui-panel {
       position: fixed;
       top: 12px;
       left: 12px;
       z-index: 10;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
       padding: 10px 14px;
       border: none;
       border-radius: 6px;
@@ -20,11 +25,17 @@
       cursor: pointer;
       box-shadow: 0 6px 18px rgba(0,0,0,0.35);
     }
-    #btn-toggle-walls:hover { background: #1d4ed8; }
+    .btn:hover { background: #1d4ed8; }
   </style>
 </head>
 <body>
-  <button id="btn-toggle-walls">Ocultar paneles</button>
+  <div id="ui-panel">
+    <button class="btn" id="btn-toggle-walls">Ocultar paneles</button>
+    <button class="btn" data-view="iso">Vista isométrica</button>
+    <button class="btn" data-view="top">Vista superior</button>
+    <button class="btn" data-view="wall2">Vista pared 2</button>
+    <button class="btn" data-view="wall4">Vista pared 4</button>
+  </div>
   <script type="module">
     import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
     import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js';
@@ -41,10 +52,8 @@
     document.body.appendChild(renderer.domElement);
 
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth / initialHeight, 0.1, 10000);
-    camera.position.set(1800, 1800, 2000);
 
     const controls = new OrbitControls(camera, renderer.domElement);
-    controls.target.set(0, 600, 0);
     controls.enableDamping = true;
 
     const ambient = new THREE.AmbientLight(0xffffff, 0.35);
@@ -350,6 +359,25 @@
     binPlaceholder = createBinPlaceholder();
     scene.add(binPlaceholder);
 
+    // Vistas rápidas
+    const views = {
+      iso: { pos: new THREE.Vector3(1800, 1800, 2000), target: new THREE.Vector3(0, 600, 0) },
+      top: { pos: new THREE.Vector3(0, 3000, 0), target: new THREE.Vector3(0, 0, 0) },
+      wall2: { pos: new THREE.Vector3(2200, 800, 0), target: new THREE.Vector3(0, 600, 0) },
+      wall4: { pos: new THREE.Vector3(0, 800, 2200), target: new THREE.Vector3(0, 600, 0) }
+    };
+
+    function setView(key) {
+      const v = views[key];
+      if (!v) return;
+      camera.position.copy(v.pos);
+      controls.target.copy(v.target);
+      controls.update();
+    }
+
+    // Vista inicial
+    setView('iso');
+
     // Toggle paredes
     let wallsVisible = true;
     document.getElementById('btn-toggle-walls').addEventListener('click', ()=>{
@@ -357,6 +385,11 @@
       wallGroup.visible = wallsVisible;
       labels.forEach(l=> l.visible = wallsVisible);
       document.getElementById('btn-toggle-walls').textContent = wallsVisible ? 'Ocultar paneles' : 'Mostrar paneles';
+    });
+
+    // Botones de vista
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.addEventListener('click', () => setView(btn.dataset.view));
     });
 
     // Cargar GLB si existe
