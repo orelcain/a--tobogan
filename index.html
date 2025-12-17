@@ -38,6 +38,14 @@
       font-size: 13px;
     }
   </style>
+  <script>
+    // Desregistrar cualquier Service Worker viejo
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(reg => reg.unregister());
+      });
+    }
+  </script>
 </head>
 <body>
   <div id="ui-panel">
@@ -54,7 +62,7 @@
     import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
     import { RoundedBoxGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/RoundedBoxGeometry.js';
     
-    const APP_VERSION = 'v0.2.0';
+    const APP_VERSION = 'v0.2.1';
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1220);
