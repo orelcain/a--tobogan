@@ -22,13 +22,14 @@
     }
     #btn-toggle-walls:hover { background: #1d4ed8; }
   </style>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
   <button id="btn-toggle-walls">Ocultar paneles</button>
-  <script>
+  <script type="module">
+    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
+    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js';
+    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
+    import { RoundedBoxGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/RoundedBoxGeometry.js';
     // Escena base
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1220);
@@ -42,7 +43,7 @@
     const camera = new THREE.PerspectiveCamera(50, window.innerWidth / initialHeight, 0.1, 10000);
     camera.position.set(1800, 1800, 2000);
 
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0, 600, 0);
     controls.enableDamping = true;
 
@@ -132,7 +133,6 @@
     scene.add(...labels);
 
     // Bin placeholder
-    const { RoundedBoxGeometry } = THREE;
     let binPlaceholder;
 
     function createBinPlaceholder() {
@@ -361,7 +361,7 @@
 
     // Cargar GLB si existe
     (function cargarBinGLB() {
-      const loader = new THREE.GLTFLoader();
+      const loader = new GLTFLoader();
       loader.load('bin_model.glb', gltf => {
         if (binPlaceholder) scene.remove(binPlaceholder);
         cloth.running = false;
