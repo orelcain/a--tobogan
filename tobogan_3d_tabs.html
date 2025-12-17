@@ -37,10 +37,11 @@
     <button class="btn" data-view="wall4">Vista pared 4</button>
   </div>
   <script type="module">
-    import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js';
-    import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js';
-    import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js';
-    import { RoundedBoxGeometry } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/RoundedBoxGeometry.js';
+    const v = 'v=4';
+    import * as THREE from `https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js?${v}`;
+    import { OrbitControls } from `https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/controls/OrbitControls.js?${v}`;
+    import { GLTFLoader } from `https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/GLTFLoader.js?${v}`;
+    import { RoundedBoxGeometry } from `https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/geometries/RoundedBoxGeometry.js?${v}`;
     // Escena base
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0b1220);
