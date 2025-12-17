@@ -3,18 +3,202 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    // Cloth sim (bolsa) helpers
-    const cloth = {
-      resX: 30,
-      resY: 30,
-      points: [],
-      prev: [],
-      pinned: [],
-      indices: null,
-      geom: null,
-      mesh: null,
-      running: true
-    };
+  <title>Tobogán 3D</title>
+  <style>
+    body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; background: #0b1220; }
+    #btn-toggle-walls {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      padding: 10px 14px;
+      border: none;
+      border-radius: 6px;
+      background: #1e40af;
+      color: #e2e8f0;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    }
+    #btn-toggle-walls:hover { background: #1d4ed8; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+  <button id="btn-toggle-walls">Ocultar paneles</button>
+  <script>
+    // Escena base
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1220);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    const initialHeight = window.innerHeight - 40;
+    renderer.setSize(window.innerWidth, initialHeight);
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / initialHeight, 0.1, 10000);
+    camera.position.set(1800, 1800, 2000);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 600, 0);
+    controls.enableDamping = true;
+
+    const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+    scene.add(ambient);
+
+    const dir = new THREE.DirectionalLight(0xffffff, 1.1);
+    dir.position.set(2000, 2500, 1200);
+    dir.castShadow = true;
+    dir.shadow.mapSize.set(2048, 2048);
+    scene.add(dir);
+
+    // Constantes de sala y bin
+    const ROOM_W = 4000;
+    const ROOM_L = 4000;
+    const ROOM_H = 4000;
+    const WALL_THK = 115;
+    const BIN_W = 1200, BIN_L = 1000, BIN_H = 900;
+    const BIN_THK = 35;
+    const BIN_POS_X = ROOM_W/2 - WALL_THK - BIN_W/2 - 100;
+    const BIN_POS_Z = ROOM_L/2 - WALL_THK - BIN_L/2 - 700;
+
+    // Suelo
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(5000, 5000),
+      new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.9, metalness: 0 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
+    // Paredes PIR
+    const wallGroup = new THREE.Group();
+    const wallMat = new THREE.MeshPhysicalMaterial({
+      color: 0x9fb8d6,
+      roughness: 0.35,
+      metalness: 0.05,
+      transparent: true,
+      opacity: 0.35,
+      transmission: 0.25,
+      thickness: 1.0
+    });
+
+    function buildWall(width, height, depth, pos, rotY) {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), wallMat);
+      wall.position.copy(pos);
+      wall.rotation.y = rotY;
+      wall.castShadow = false;
+      wall.receiveShadow = true;
+      wallGroup.add(wall);
+    }
+
+    const halfW = ROOM_W / 2 - WALL_THK / 2;
+    const halfL = ROOM_L / 2 - WALL_THK / 2;
+    const wallHeight = ROOM_H - 100;
+    buildWall(ROOM_W, wallHeight, WALL_THK, new THREE.Vector3(0, wallHeight/2, -halfL), 0); // pared 3
+    buildWall(ROOM_W, wallHeight, WALL_THK, new THREE.Vector3(0, wallHeight/2, halfL), 0);  // pared 4
+    buildWall(ROOM_L, wallHeight, WALL_THK, new THREE.Vector3(-halfW, wallHeight/2, 0), Math.PI/2); // pared 1
+    buildWall(ROOM_L, wallHeight, WALL_THK, new THREE.Vector3(halfW, wallHeight/2, 0), Math.PI/2);  // pared 2
+    scene.add(wallGroup);
+
+    // Etiquetas 1-4
+    function makeLabel(text) {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0,0,size,size);
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = 'bold 140px Segoe UI';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, size/2, size/2);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.anisotropy = 4;
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
+      const spr = new THREE.Sprite(mat);
+      spr.scale.set(600, 600, 1);
+      return spr;
+    }
+    const labelLeft = makeLabel('1'); labelLeft.position.set(-ROOM_W/2 + WALL_THK + 20, ROOM_H/2, 0);
+    const labelRight = makeLabel('2'); labelRight.position.set(ROOM_W/2 - WALL_THK - 20, ROOM_H/2, 0);
+    const labelBack = makeLabel('3'); labelBack.position.set(0, ROOM_H/2, -ROOM_L/2 + WALL_THK + 20);
+    const labelFront = makeLabel('4'); labelFront.position.set(0, ROOM_H/2, ROOM_L/2 - WALL_THK - 20);
+    const labels = [labelLeft, labelRight, labelBack, labelFront];
+    scene.add(...labels);
+
+    // Bin placeholder
+    const { RoundedBoxGeometry } = THREE;
+    let binPlaceholder;
+
+    function createBinPlaceholder() {
+      const g = new THREE.Group();
+      const bodyColor = 0x1f66d8;
+      const matBody = new THREE.MeshStandardMaterial({
+        color: bodyColor,
+        roughness: 0.55,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.95,
+        transmission: 0.03
+      });
+      const matDetail = new THREE.MeshStandardMaterial({ color: 0x104caa, roughness: 0.6, metalness: 0.05 });
+      const overlap = 10;
+
+      const base = new THREE.Mesh(new RoundedBoxGeometry(BIN_W, BIN_THK, BIN_L, 4, BIN_THK*0.5), matBody);
+      base.position.y = BIN_THK/2;
+      base.castShadow = true; base.receiveShadow = true;
+      g.add(base);
+
+      const wallSideGeom = new RoundedBoxGeometry(BIN_THK, BIN_H, BIN_L - 2*BIN_THK + 2*overlap, 4, BIN_THK*0.45);
+      const wallFrontGeom = new RoundedBoxGeometry(BIN_W - 2*BIN_THK + 2*overlap, BIN_H, BIN_THK, 4, BIN_THK*0.45);
+
+      const wallL = new THREE.Mesh(wallSideGeom, matBody);
+      wallL.position.set(-BIN_W/2 + BIN_THK/2, BIN_THK/2 + BIN_H/2, 0);
+      const wallR = wallL.clone(); wallR.position.x = BIN_W/2 - BIN_THK/2;
+      const wallF = new THREE.Mesh(wallFrontGeom, matBody);
+      wallF.position.set(0, BIN_THK/2 + BIN_H/2, BIN_L/2 - BIN_THK/2);
+      const wallB = wallF.clone(); wallB.position.z = -BIN_L/2 + BIN_THK/2;
+      [wallL, wallR, wallF, wallB].forEach(w => { w.castShadow = true; w.receiveShadow = true; g.add(w); });
+
+      const cornerGeom = new RoundedBoxGeometry(BIN_THK + overlap, BIN_H, BIN_THK + overlap, 4, BIN_THK*0.35);
+      const corners = [
+        { x:-BIN_W/2 + BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
+        { x:-BIN_W/2 + BIN_THK/2, z: BIN_L/2 - BIN_THK/2 },
+        { x: BIN_W/2 - BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
+        { x: BIN_W/2 - BIN_THK/2, z: BIN_L/2 - BIN_THK/2 }
+      ];
+      corners.forEach(c => {
+        const corner = new THREE.Mesh(cornerGeom, matBody);
+        corner.position.set(c.x, BIN_THK/2 + BIN_H/2, c.z);
+        corner.castShadow = true; corner.receiveShadow = true;
+        g.add(corner);
+      });
+
+      const footGeom = new THREE.BoxGeometry(BIN_W/3 - 40, 120, BIN_L/2);
+      [ -BIN_W/3, 0, BIN_W/3 ].forEach(x => {
+        const foot = new THREE.Mesh(footGeom, matDetail);
+        foot.position.set(x, 60, 0);
+        foot.castShadow = true; foot.receiveShadow = true;
+        g.add(foot);
+      });
+
+      const overhang = 350;
+      const clothWidth = BIN_W + overhang*1.2;
+      const clothDepth = BIN_L + overhang*1.2;
+      const bagMesh = createClothMesh(clothWidth, clothDepth, overhang);
+      g.add(bagMesh);
+
+      g.position.set(BIN_POS_X, 0, BIN_POS_Z);
+      return g;
+    }
+
+    // Cloth sim
+    const cloth = { resX: 30, resY: 30, points: [], prev: [], pinned: [], geom: null, mesh: null, running: true };
     const clothWidthCache = { dx: 0, dz: 0 };
 
     function idx(u, v) { return v * cloth.resX + u; }
@@ -28,25 +212,23 @@
       cloth.prev = new Array(cloth.resX * cloth.resY);
       cloth.pinned = new Array(cloth.resX * cloth.resY).fill(false);
 
-      const startY = BIN_H + overhang + 100; // start above bin
+      const startY = BIN_H + overhang + 100;
       for (let v = 0; v < cloth.resY; v++) {
         for (let u = 0; u < cloth.resX; u++) {
           const x = -width/2 + u * dx;
           const z = -height/2 + v * dz;
-          const y = startY - v * 5; // slight tilt to help settle
+          const y = startY - v * 5;
           const p = new THREE.Vector3(x, y, z);
           cloth.points[idx(u,v)] = p.clone();
           cloth.prev[idx(u,v)] = p.clone();
         }
       }
 
-      // Pin a few outer corners to stabilize a bit
       cloth.pinned[idx(0,0)] = true;
       cloth.pinned[idx(cloth.resX-1,0)] = true;
       cloth.pinned[idx(0,cloth.resY-1)] = true;
       cloth.pinned[idx(cloth.resX-1,cloth.resY-1)] = true;
 
-      // Geometry
       cloth.geom = new THREE.BufferGeometry();
       const positions = new Float32Array(cloth.points.length * 3);
       cloth.geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
@@ -61,7 +243,6 @@
           indices.push(a, c, b, b, c, d);
         }
       }
-      cloth.indices = indices;
       cloth.geom.setIndex(indices);
       cloth.geom.computeVertexNormals();
 
@@ -88,7 +269,6 @@
           for (let u=0; u<cloth.resX; u++) {
             const i = idx(u,v);
             const p = cloth.points[i];
-            // vecinos estructurales
             if (u < cloth.resX-1) {
               const j = idx(u+1,v); project(p, cloth.points[j], rest.dx);
             }
@@ -131,22 +311,19 @@
       const innerY = BIN_H - 5;
       const outerX = BIN_W/2 + 40;
       const outerZ = BIN_L/2 + 40;
-      const cuffY = BIN_H + 400; // limit cuff height
+      const cuffY = BIN_H + 400;
 
       for (let i=0; i<cloth.points.length; i++) {
         const p = cloth.points[i];
-        // region test
         const insideFootprint = Math.abs(p.x) <= innerX && Math.abs(p.z) <= innerZ;
         if (insideFootprint && p.y < innerY) {
           p.x = Math.max(-innerX, Math.min(innerX, p.x));
           p.z = Math.max(-innerZ, Math.min(innerZ, p.z));
           p.y = Math.max(BIN_THK * 0.6, p.y);
         } else {
-          // outside footprint -> cuff
           p.x = Math.max(-outerX, Math.min(outerX, p.x));
           p.z = Math.max(-outerZ, Math.min(outerZ, p.z));
           p.y = Math.min(cuffY, p.y);
-          // let cuff hang: don't push up unless below rim
           if (p.y < BIN_H - 40) p.y = BIN_H - 40;
         }
       }
@@ -170,250 +347,10 @@
       updateGeometry();
     }
 
-    function createBinPlaceholder() {
-      const g = new THREE.Group();
-      const bodyColor = 0x1f66d8;
-      const matBody = new THREE.MeshStandardMaterial({
-        color: bodyColor,
-        roughness: 0.55,
-        metalness: 0.05,
-        transparent: true,
-        opacity: 0.95,
-        transmission: 0.03
-      });
-      const matDetail = new THREE.MeshStandardMaterial({ color: 0x104caa, roughness: 0.6, metalness: 0.05 });
-      const overlap = 10; // solape para evitar fugas en uniones
-
-      // Base con cantos redondeados
-      const base = new THREE.Mesh(new RoundedBoxGeometry(BIN_W, BIN_THK, BIN_L, 4, BIN_THK*0.5), matBody);
-      base.position.y = BIN_THK/2;
-      base.castShadow = true; base.receiveShadow = true;
-      g.add(base);
-
-      // Paredes laterales huecas (sin tapa) con bordes achaflanados
-      const wallSideGeom = new RoundedBoxGeometry(BIN_THK, BIN_H, BIN_L - 2*BIN_THK + 2*overlap, 4, BIN_THK*0.45);
-      const wallFrontGeom = new RoundedBoxGeometry(BIN_W - 2*BIN_THK + 2*overlap, BIN_H, BIN_THK, 4, BIN_THK*0.45);
-
-      const wallL = new THREE.Mesh(wallSideGeom, matBody);
-      wallL.position.set(-BIN_W/2 + BIN_THK/2, BIN_THK/2 + BIN_H/2, 0);
-      const wallR = wallL.clone(); wallR.position.x = BIN_W/2 - BIN_THK/2;
-      const wallF = new THREE.Mesh(wallFrontGeom, matBody);
-      wallF.position.set(0, BIN_THK/2 + BIN_H/2, BIN_L/2 - BIN_THK/2);
-      const wallB = wallF.clone(); wallB.position.z = -BIN_L/2 + BIN_THK/2;
-      [wallL, wallR, wallF, wallB].forEach(w => { w.castShadow = true; w.receiveShadow = true; g.add(w); });
-
-      // Relleno de esquinas para sellar uniones
-      const cornerGeom = new RoundedBoxGeometry(BIN_THK + overlap, BIN_H, BIN_THK + overlap, 4, BIN_THK*0.35);
-      const corners = [
-        { x:-BIN_W/2 + BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
-        { x:-BIN_W/2 + BIN_THK/2, z: BIN_L/2 - BIN_THK/2 },
-        { x: BIN_W/2 - BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
-        { x: BIN_W/2 - BIN_THK/2, z: BIN_L/2 - BIN_THK/2 }
-      ];
-      corners.forEach(c => {
-        const corner = new THREE.Mesh(cornerGeom, matBody);
-        corner.position.set(c.x, BIN_THK/2 + BIN_H/2, c.z);
-        corner.castShadow = true; corner.receiveShadow = true;
-        g.add(corner);
-      });
-
-      // Pies tipo pallet
-      const footGeom = new THREE.BoxGeometry(BIN_W/3 - 40, 120, BIN_L/2);
-      [ -BIN_W/3, 0, BIN_W/3 ].forEach(x => {
-        const foot = new THREE.Mesh(footGeom, matDetail);
-        foot.position.set(x, 60, 0);
-        foot.castShadow = true; foot.receiveShadow = true;
-        g.add(foot);
-      });
-
-      // Bolsa con cloth
-      const overhang = 350;
-      const clothWidth = BIN_W + overhang*1.2;
-      const clothDepth = BIN_L + overhang*1.2;
-      const bagMesh = createClothMesh(clothWidth, clothDepth, overhang);
-      g.add(bagMesh);
-
-      g.position.set(BIN_POS_X, 0, BIN_POS_Z);
-      return g;
-    }
-      wallGroup.add(wallFrontRight);
-    }
-
-    if (topHeight > 0) {
-      const wallFrontTop = buildWallPanels(DOOR_W, topHeight, WALL_THK, 'x');
-      wallFrontTop.position.set(-ROOM_W/2 + DOOR_OFFSET_FROM_LEFT + DOOR_W/2, DOOR_H + topHeight/2, frontZ);
-      wallGroup.add(wallFrontTop);
-    }
-
-    scene.add(wallGroup);
-
-    // Techo removido para vista abierta
-
-    // Etiquetas numéricas en paredes
-    function makeLabel(text) {
-      const size = 256;
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = size;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(0,0,size,size);
-      ctx.fillStyle = '#e2e8f0';
-      ctx.font = 'bold 140px Segoe UI';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(text, size/2, size/2);
-      const tex = new THREE.CanvasTexture(canvas);
-      tex.anisotropy = 8;
-      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true });
-      const spr = new THREE.Sprite(mat);
-      spr.scale.set(600, 600, 1);
-      return spr;
-    }
-
-    const labelLeft = makeLabel('1'); labelLeft.position.set(-ROOM_W/2 + WALL_THK + 20, ROOM_H/2, 0);
-    const labelRight = makeLabel('2'); labelRight.position.set(ROOM_W/2 - WALL_THK - 20, ROOM_H/2, 0);
-    const labelBack = makeLabel('3'); labelBack.position.set(0, ROOM_H/2, -ROOM_L/2 + WALL_THK + 20);
-    const labelFront = makeLabel('4'); labelFront.position.set(0, ROOM_H/2, ROOM_L/2 - WALL_THK - 20);
-    const labels = [labelLeft, labelRight, labelBack, labelFront];
-    scene.add(...labels);
-
-    // Bin azul estilo foto (placeholder hueco). Se reemplaza si existe bin_model.glb
-    const BIN_W = 1200, BIN_L = 1000, BIN_H = 900;
-    const BIN_THK = 35;
-    const BIN_POS_X = ROOM_W/2 - WALL_THK - BIN_W/2 - 100; // hacia pared 2 con margen
-    const BIN_POS_Z = ROOM_L/2 - WALL_THK - BIN_L/2 - 700; // a 700 mm de la pared 4
-    let binPlaceholder;
-
-    function createBinPlaceholder() {
-      const g = new THREE.Group();
-      const bodyColor = 0x1f66d8;
-      const matBody = new THREE.MeshStandardMaterial({
-        color: bodyColor,
-        roughness: 0.55,
-        metalness: 0.05,
-        transparent: true,
-        opacity: 0.95,
-        transmission: 0.03
-      });
-      const matDetail = new THREE.MeshStandardMaterial({ color: 0x104caa, roughness: 0.6, metalness: 0.05 });
-      const overlap = 10; // solape para evitar fugas en uniones
-
-      // Base con cantos redondeados
-      const base = new THREE.Mesh(new RoundedBoxGeometry(BIN_W, BIN_THK, BIN_L, 4, BIN_THK*0.5), matBody);
-      base.position.y = BIN_THK/2;
-      base.castShadow = true; base.receiveShadow = true;
-      g.add(base);
-
-      // Paredes laterales huecas (sin tapa) con bordes achaflanados
-      const wallSideGeom = new RoundedBoxGeometry(BIN_THK, BIN_H, BIN_L - 2*BIN_THK + 2*overlap, 4, BIN_THK*0.45);
-      const wallFrontGeom = new RoundedBoxGeometry(BIN_W - 2*BIN_THK + 2*overlap, BIN_H, BIN_THK, 4, BIN_THK*0.45);
-
-      const wallL = new THREE.Mesh(wallSideGeom, matBody);
-      wallL.position.set(-BIN_W/2 + BIN_THK/2, BIN_THK/2 + BIN_H/2, 0);
-      const wallR = wallL.clone(); wallR.position.x = BIN_W/2 - BIN_THK/2;
-      const wallF = new THREE.Mesh(wallFrontGeom, matBody);
-      wallF.position.set(0, BIN_THK/2 + BIN_H/2, BIN_L/2 - BIN_THK/2);
-      const wallB = wallF.clone(); wallB.position.z = -BIN_L/2 + BIN_THK/2;
-      [wallL, wallR, wallF, wallB].forEach(w => { w.castShadow = true; w.receiveShadow = true; g.add(w); });
-
-      // Relleno de esquinas para sellar uniones
-      const cornerGeom = new RoundedBoxGeometry(BIN_THK + overlap, BIN_H, BIN_THK + overlap, 4, BIN_THK*0.35);
-      const corners = [
-        { x:-BIN_W/2 + BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
-        { x:-BIN_W/2 + BIN_THK/2, z: BIN_L/2 - BIN_THK/2 },
-        { x: BIN_W/2 - BIN_THK/2, z:-BIN_L/2 + BIN_THK/2 },
-        { x: BIN_W/2 - BIN_THK/2, z: BIN_L/2 - BIN_THK/2 }
-      ];
-      corners.forEach(c => {
-        const corner = new THREE.Mesh(cornerGeom, matBody);
-        corner.position.set(c.x, BIN_THK/2 + BIN_H/2, c.z);
-        corner.castShadow = true; corner.receiveShadow = true;
-        g.add(corner);
-      });
-
-      // Pies tipo pallet
-      const footGeom = new THREE.BoxGeometry(BIN_W/3 - 40, 120, BIN_L/2);
-      [ -BIN_W/3, 0, BIN_W/3 ].forEach(x => {
-        const foot = new THREE.Mesh(footGeom, matDetail);
-        foot.position.set(x, 60, 0);
-        foot.castShadow = true; foot.receiveShadow = true;
-        g.add(foot);
-      });
-
-      // Bolsa (liner) translúcida: cubre interior y cae por fuera (~350 mm de cuff)
-      const BAG_W = BIN_W - 2*BIN_THK + 40; // un poco más ancha para abrazar el exterior
-      const BAG_L = BIN_L - 2*BIN_THK + 40;
-      const BAG_H = BIN_H + 350; // sobresale 350 mm para el doblez y caída exterior
-      const bagGeom = new THREE.BoxGeometry(BAG_W, BAG_H, BAG_L, 6, 6, 6);
-      const posAttr = bagGeom.getAttribute('position');
-      for (let i = 0; i < posAttr.count; i++) {
-        const x = posAttr.getX(i);
-        const y = posAttr.getY(i);
-        const z = posAttr.getZ(i);
-        const k = 0.1;
-        const noise = (Math.random() - 0.5) * k;
-        let nx = x + x*noise;
-        let ny = y + y*noise*1.35;
-        let nz = z + z*noise;
-
-        // doblar hacia afuera en la zona superior (cuff ~350 mm)
-        const foldZone = 240; // mm de zona para el doblez
-        const foldDrop = 260; // caída del cuff sobre la cara externa
-        const foldStart = BAG_H/2 - foldZone;
-        if (y > foldStart) {
-          const t = (y - foldStart) / foldZone; // 0..1
-          const flare = 0.085;
-          nx *= 1 + flare * t;
-          nz *= 1 + flare * t;
-          ny -= foldDrop * t;
-        }
-
-        const topSag = Math.max(0, (y - BAG_H/4) / BAG_H);
-        ny -= topSag * 26 * Math.random();
-
-        // colisión simple contra el bin: dentro se clampa al hueco, fuera abraza el exterior
-        const innerX = BIN_W/2 - BIN_THK*0.7;
-        const innerZ = BIN_L/2 - BIN_THK*0.7;
-        const outerX = BIN_W/2 + 25;
-        const outerZ = BIN_L/2 + 25;
-
-        if (ny <= BIN_H) {
-          nx = Math.max(-innerX, Math.min(innerX, nx));
-          nz = Math.max(-innerZ, Math.min(innerZ, nz));
-          ny = Math.max(BIN_THK * 0.6, ny);
-        } else {
-          nx = Math.max(-outerX, Math.min(outerX, nx));
-          nz = Math.max(-outerZ, Math.min(outerZ, nz));
-          ny = Math.max(BIN_H - 5, ny);
-        }
-
-        posAttr.setXYZ(i, nx, ny, nz);
-      }
-      posAttr.needsUpdate = true;
-      bagGeom.computeVertexNormals();
-      const bagMat = new THREE.MeshPhysicalMaterial({
-        color: 0xe8f4ff,
-        roughness: 0.75,
-        metalness: 0.0,
-        transparent: true,
-        opacity: 0.45,
-        transmission: 0.6,
-        thickness: 1.5,
-        ior: 1.02,
-        side: THREE.DoubleSide
-      });
-      const bag = new THREE.Mesh(bagGeom, bagMat);
-      bag.position.set(0, BAG_H/2 + BIN_THK - 10, 0);
-      bag.castShadow = false; bag.receiveShadow = false;
-      g.add(bag);
-
-      g.position.set(BIN_POS_X, 0, BIN_POS_Z);
-      return g;
-    }
-
     binPlaceholder = createBinPlaceholder();
     scene.add(binPlaceholder);
 
-    // Toggle paneles
+    // Toggle paredes
     let wallsVisible = true;
     document.getElementById('btn-toggle-walls').addEventListener('click', ()=>{
       wallsVisible = !wallsVisible;
@@ -422,35 +359,28 @@
       document.getElementById('btn-toggle-walls').textContent = wallsVisible ? 'Ocultar paneles' : 'Mostrar paneles';
     });
 
-    // Intentar cargar bin_model.glb si existe
+    // Cargar GLB si existe
     (function cargarBinGLB() {
-      const loader = new GLTFLoader();
+      const loader = new THREE.GLTFLoader();
       loader.load('bin_model.glb', gltf => {
         if (binPlaceholder) scene.remove(binPlaceholder);
-        cloth.running = false; // detener cloth placeholder si se carga GLB real
+        cloth.running = false;
         const obj = gltf.scene;
         obj.traverse(n => { if (n.isMesh) { n.castShadow = true; n.receiveShadow = true; } });
-        obj.scale.set(1,1,1);
         obj.position.set(BIN_POS_X, 0, BIN_POS_Z);
         scene.add(obj);
-      }, undefined, () => {
-        // si falla, se queda el placeholder
-      });
+      }, undefined, () => {});
     })();
 
     let last = performance.now();
     function animate(){
       requestAnimationFrame(animate);
       const now = performance.now();
-      const dt = Math.min(0.033, (now - last)/1000); // cap dt
+      const dt = Math.min(0.033, (now - last)/1000);
       last = now;
 
-      // Cloth step: rest lengths
       if (cloth.geom) {
-        const rest = {
-          dx: (clothWidthCache.dx),
-          dz: (clothWidthCache.dz)
-        };
+        const rest = { dx: clothWidthCache.dx, dz: clothWidthCache.dz };
         stepCloth(dt, rest);
       }
 
